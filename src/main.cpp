@@ -3,14 +3,14 @@
 #include <NeoPixelBus.h>
 #include <ArduinoOTA.h>
 #include <HTTPClient.h>
-#include "wifi.h"
+#include "config.h"
 
 // Replace with your network credentials
 const char *ssid = SSID;
 const char *password = PASSWORD;
 
 // Shelly 3EM device IP address
-const char *shellyIP = "192.168.88.32";
+const char *shellyIP = SHELLY_IP;
 
 // Pin definition for the WS2812B LED matrix
 const uint16_t LED_COUNT = 32;
