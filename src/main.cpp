@@ -12,17 +12,15 @@ const char *password = PASSWORD;
 // Shelly 3EM device IP address
 const char *shellyIP = SHELLY_IP;
 
-// Pin definition for the WS2812B LED matrix
-const uint16_t LED_COUNT = 32;
-const uint16_t LED_PIN = 7;
-const int MAX_POWER = 2000;
-const int MAX_PRODUCING = 600;
-
 // Create an instance of the NeoPixelBus library
 NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> strip(LED_COUNT, LED_PIN);
 
+int last_leds = 0;
+
 void setup()
 {
+  pinMode(LED, OUTPUT);
+  digitalWrite(LED, LOW);
   Serial.begin(115200);
   while (!Serial)
     ; // wait for serial attach
@@ -41,6 +39,7 @@ void setup()
   // Enable OTA updates
   ArduinoOTA.setHostname("ledpowermeter");
   ArduinoOTA.begin();
+  digitalWrite(LED, HIGH);
 }
 
 RgbColor getColorFromPower(bool producing)
@@ -82,19 +81,28 @@ void loop()
       power = -power;
     if (power > MAX_POWER)
       power = MAX_POWER;
-    int step = (producing?MAX_PRODUCING:MAX_POWER) / LED_COUNT;
-    strip.ClearTo(0);
-    for (int i=0; i < power / step; i++)
+    int step = (producing ? MAX_PRODUCING : MAX_POWER) / LED_COUNT;
+    int target_leds = power / step;
+    while (last_leds != target_leds)
     {
-      strip.SetPixelColor(i, getColorFromPower(producing));
+      if(target_leds > last_leds) last_leds++;
+      if(target_leds < last_leds) last_leds--;
+      strip.ClearTo(0);
+      for (int i = 0; i < last_leds; i++)
+      {
+        strip.SetPixelColor(i, getColorFromPower(producing));
+      }
+      strip.Show();
+      delay(ANIMATE_DELAY);
     }
-    strip.Show();
   }
   else
   {
+    digitalWrite(LED, LOW);
     Serial.println("Error making HTTP request");
   }
 
   // Wait for a second before making the next request
-  delay(1000);
+  delay(POLLING_DELAY);
+  digitalWrite(LED, HIGH);
 }
