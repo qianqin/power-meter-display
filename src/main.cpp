@@ -15,7 +15,16 @@ const char *shellyIP = SHELLY_IP;
 // Create an instance of the NeoPixelBus library
 NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> strip(LED_COUNT, LED_PIN);
 
-int last_leds = 0;
+int current_leds = 0;
+unsigned long last_poll = 0;
+unsigned long last_animate = 0;
+unsigned long last_change = 0;
+byte target[LED_COUNT];
+byte current[LED_COUNT];
+bool producing = false;
+int power = 0;
+
+int get_power();
 
 void setup()
 {
@@ -39,14 +48,20 @@ void setup()
   // Enable OTA updates
   ArduinoOTA.setHostname("ledpowermeter");
   ArduinoOTA.begin();
+
+  for (int i = 0; i < LED_COUNT; i++)
+  {
+    current[i] = 0;
+    target[i] = 0;
+  }
   digitalWrite(LED, HIGH);
 }
 
-RgbColor getColorFromPower(bool producing)
+RgbColor getColorWithPower(byte value)
 {
   if (producing)
-    return RgbColor(0, 1, 0);
-  return RgbColor(1, 0, 0);
+    return RgbColor(0, value, 0);
+  return RgbColor(value, 0, 0);
 }
 
 void loop()
@@ -54,6 +69,66 @@ void loop()
   // Handle OTA update requests
   ArduinoOTA.handle();
 
+  unsigned long now = millis();
+
+  if ((unsigned long)(now - last_animate) > ANIMATE_DELAY)
+  {
+    // time to do animation
+    strip.ClearTo(0);
+    for (int i = 0; i < LED_COUNT; i++)
+    {
+      if (current[i] < target[i])
+        current[i] += ANIMATE_STEP;
+      if (current[i] > target[i])
+        current[i] -= ANIMATE_STEP;
+      strip.SetPixelColor(i, getColorWithPower(current[i]));
+    }
+    strip.Show();
+    last_animate = now;
+  }
+
+  if ((unsigned long)(now - last_poll) > POLLING_DELAY)
+  {
+    // time to poll data
+    power = get_power();
+    last_poll = now;
+  }
+
+   if ((unsigned long)(now - last_change) > LED_CHANGE_DELAY)
+  {
+    // time to poll data
+    producing = power < 0;
+
+    if (producing)
+      power = -power;
+    if (producing && power > MAX_POWER)
+      power = MAX_POWER;
+    if (!producing && power > MAX_PRODUCING)
+      power = MAX_PRODUCING;
+    int step = (producing ? MAX_PRODUCING : MAX_POWER) / LED_COUNT;
+    int target_leds = power / step;
+
+    if(target_leds > current_leds) current_leds++;
+    if(target_leds < current_leds) current_leds--;
+
+    for (int i = 0; i < LED_COUNT; i++)
+    {
+      if (i < current_leds)
+      {
+        target[i] = producing?LED_MAX_BRIGHTNESS_PRODUCING:LED_MAX_BRIGHTNESS_CONSUMING;
+      }
+      else
+      {
+        target[i] = 0;
+      }
+    }
+    last_change = now;
+  }
+}
+
+int get_power()
+{
+  digitalWrite(LED, HIGH);
   // Make an HTTP request to the Shelly 3EM device API to get the current power consumption data
   String url = "http://" + String(shellyIP) + "/status";
   HTTPClient http;
@@ -73,36 +148,12 @@ void loop()
     Serial.println(power);
 
     // Display the power consumption value on the LED matrix
-    int powerDisplay = (int)power;
-
-    bool producing = power < 0;
-
-    if (producing)
-      power = -power;
-    if (power > MAX_POWER)
-      power = MAX_POWER;
-    int step = (producing ? MAX_PRODUCING : MAX_POWER) / LED_COUNT;
-    int target_leds = power / step;
-    while (last_leds != target_leds)
-    {
-      if(target_leds > last_leds) last_leds++;
-      if(target_leds < last_leds) last_leds--;
-      strip.ClearTo(0);
-      for (int i = 0; i < last_leds; i++)
-      {
-        strip.SetPixelColor(i, getColorFromPower(producing));
-      }
-      strip.Show();
-      delay(ANIMATE_DELAY);
-    }
+    return (int)power;
   }
   else
   {
     digitalWrite(LED, LOW);
     Serial.println("Error making HTTP request");
   }
-
-  // Wait for a second before making the next request
-  delay(POLLING_DELAY);
-  digitalWrite(LED, HIGH);
+  return 0;
 }
