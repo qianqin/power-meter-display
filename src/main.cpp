@@ -13,14 +13,14 @@ const char *password = PASSWORD;
 const char *shellyIP = SHELLY_IP;
 
 // Create an instance of the NeoPixelBus library
-NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> strip(LED_COUNT, LED_PIN);
+NeoPixelBus<NeoGrbFeature, NEOPIXEL_METHOD> strip(LED_COUNT, LED_PIN);
 
 int current_leds = 0;
 unsigned long last_poll = 0;
 unsigned long last_animate = 0;
 unsigned long last_change = 0;
-byte target[LED_COUNT];
-byte current[LED_COUNT];
+int target[LED_COUNT];
+int current[LED_COUNT];
 bool producing = false;
 int power = 0;
 
@@ -73,17 +73,29 @@ void loop()
 
   if ((unsigned long)(now - last_animate) > ANIMATE_DELAY)
   {
+    bool hasChanged = false;
     // time to do animation
     strip.ClearTo(0);
     for (int i = 0; i < LED_COUNT; i++)
     {
+      if (current[i] == target[i])
+      {
+        strip.SetPixelColor(i, getColorWithPower(target[i]));
+        continue;
+      }
       if (current[i] < target[i])
         current[i] += ANIMATE_STEP;
       if (current[i] > target[i])
         current[i] -= ANIMATE_STEP;
+      if (current[i] > 255)
+        current[i] = 255;
+      if (current[i] < 0)
+        current[i] = 0;
       strip.SetPixelColor(i, getColorWithPower(current[i]));
+      hasChanged = true;
     }
-    strip.Show();
+    if (hasChanged)
+      strip.Show();
     last_animate = now;
   }
 
@@ -94,7 +106,7 @@ void loop()
     last_poll = now;
   }
 
-   if ((unsigned long)(now - last_change) > LED_CHANGE_DELAY)
+  if ((unsigned long)(now - last_change) > LED_CHANGE_DELAY)
   {
     // time to poll data
     producing = power < 0;
@@ -108,14 +120,16 @@ void loop()
     int step = (producing ? MAX_PRODUCING : MAX_POWER) / LED_COUNT;
     int target_leds = power / step;
 
-    if(target_leds > current_leds) current_leds++;
-    if(target_leds < current_leds) current_leds--;
+    if (target_leds > current_leds)
+      current_leds++;
+    if (target_leds < current_leds)
+      current_leds--;
 
     for (int i = 0; i < LED_COUNT; i++)
     {
       if (i < current_leds)
       {
-        target[i] = producing?LED_MAX_BRIGHTNESS_PRODUCING:LED_MAX_BRIGHTNESS_CONSUMING;
+        target[i] = producing ? LED_MAX_BRIGHTNESS_PRODUCING : LED_MAX_BRIGHTNESS_CONSUMING;
       }
       else
       {
