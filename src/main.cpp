@@ -4,6 +4,9 @@
 #include <ArduinoOTA.h>
 #include <HTTPClient.h>
 #include "config.h"
+#include <IRremoteESP8266.h>
+#include <IRsend.h>
+#include <ir_Gree.h>
 
 // Replace with your network credentials
 const char *ssid = SSID;
@@ -11,6 +14,8 @@ const char *password = PASSWORD;
 
 // Shelly 3EM device IP address
 const char *shellyIP = SHELLY_IP;
+
+IRGreeAC ac(GREE_AC_PIN);
 
 // Create an instance of the NeoPixelBus library
 NeoPixelBus<NeoGrbFeature, NEOPIXEL_METHOD> strip(LED_COUNT, LED_PIN);
@@ -25,11 +30,14 @@ bool producing = false;
 int power = 0;
 
 int get_power();
+void ac_on();
+void ac_off();
 
 void setup()
 {
   pinMode(LED, OUTPUT);
   digitalWrite(LED, LOW);
+  ac.begin();
   Serial.begin(115200);
   while (!Serial)
     ; // wait for serial attach
@@ -54,6 +62,7 @@ void setup()
     current[i] = 0;
     target[i] = 0;
   }
+  ac_on();
   digitalWrite(LED, HIGH);
 }
 
@@ -170,4 +179,26 @@ int get_power()
     Serial.println("Error making HTTP request");
   }
   return 0;
+}
+
+void ac_on()
+{
+  ac.on();
+  ac.setFan(GREE_AC_FAN);
+  ac.setMode(GREE_AC_MODE);
+  ac.setTemp(GREE_AC_TEMP);
+  ac.setSwingVertical(true, kGreeSwingAuto);
+  ac.setXFan(false);
+  ac.setLight(GREE_AC_LED);
+  ac.setSleep(false);
+  ac.setTurbo(false);
+  for (int i = 0; i < GREE_AC_SEND_REPEAT; i++)
+    ac.send();
+}
+
+void ac_off()
+{
+  ac.off();
+  for (int i = 0; i < GREE_AC_SEND_REPEAT; i++)
+    ac.send();
 }

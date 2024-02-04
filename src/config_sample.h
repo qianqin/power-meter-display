@@ -15,5 +15,11 @@
 #define ANIMATE_STEP 4 // increase by x per animation cycle
 #define LED_CHANGE_DELAY 250 // delay increase and decrease of LEDs
 #define NEOPIXEL_METHOD NeoWs2812xMethod
+#define GREE_AC_PIN 18 
+#define GREE_AC_TEMP 16 // 16-30C
+#define GREE_AC_FAN 0 // 1-3, 0 auto
+#define GREE_AC_MODE kGreeHeat // kGreeAuto, kGreeDry, kGreeCool, kGreeFan, kGreeHeat
+#define GREE_AC_LED true
+#define GREE_AC_SEND_REPEAT 3
 
 #endif
