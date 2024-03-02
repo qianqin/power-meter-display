@@ -15,7 +15,7 @@ const char *password = PASSWORD;
 // Shelly 3EM device IP address
 const char *shellyIP = SHELLY_IP;
 
-IRGreeAC ac(GREE_AC_PIN);
+IRGreeAC ac(GREE_AC_PIN, GREE_AC_REMOTE, false, true);
 
 // Create an instance of the NeoPixelBus library
 NeoPixelBus<NeoGrbFeature, NEOPIXEL_METHOD> strip(LED_COUNT, LED_PIN);
@@ -38,6 +38,7 @@ void setup()
   pinMode(LED, OUTPUT);
   digitalWrite(LED, LOW);
   ac.begin();
+  ac.calibrate();
   Serial.begin(115200);
   while (!Serial)
     ; // wait for serial attach
@@ -192,13 +193,11 @@ void ac_on()
   ac.setLight(GREE_AC_LED);
   ac.setSleep(false);
   ac.setTurbo(false);
-  for (int i = 0; i < GREE_AC_SEND_REPEAT; i++)
-    ac.send();
+  ac.send(GREE_AC_SEND_REPEAT);
 }
 
 void ac_off()
 {
   ac.off();
-  for (int i = 0; i < GREE_AC_SEND_REPEAT; i++)
-    ac.send();
+  ac.send(GREE_AC_SEND_REPEAT);
 }
