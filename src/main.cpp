@@ -28,10 +28,13 @@ int target[LED_COUNT];
 int current[LED_COUNT];
 bool producing = false;
 int power = 0;
+unsigned long grace_time = 0;
+int error = 0;
 
 int get_power();
 void ac_on();
 void ac_off();
+bool ac_running = false;
 
 void setup()
 {
@@ -63,7 +66,7 @@ void setup()
     current[i] = 0;
     target[i] = 0;
   }
-  ac_on();
+  ac_off();
   digitalWrite(LED, HIGH);
 }
 
@@ -85,7 +88,7 @@ void loop()
   {
     bool hasChanged = false;
     // time to do animation
-    strip.ClearTo(0);
+    strip.ClearTo(RgbColor(1, 1, 1));
     for (int i = 0; i < LED_COUNT; i++)
     {
       if (current[i] == target[i])
@@ -114,6 +117,15 @@ void loop()
     // time to poll data
     power = get_power();
     last_poll = now;
+  }
+
+  if (error > ERROR_RESTART)
+  {
+    // reboot if we have too many errors
+    Serial.println("Too many errors, rebooting");
+    delay(1000);
+    ESP.restart();
+    return;
   }
 
   if ((unsigned long)(now - last_change) > LED_CHANGE_DELAY)
@@ -148,6 +160,34 @@ void loop()
     }
     last_change = now;
   }
+
+  if (producing && !ac_running && power > GREE_AC_TURN_ON_THRESHOLD)
+  {
+    if ((unsigned long)(now - grace_time) > GREE_AC_GRACE_PERIOD)
+    {
+      Serial.println("Turning on AC");
+      ac_on();
+      grace_time = 0;
+      return;
+    }
+  }
+  else if ((ac_running && !producing))
+  {
+    if (grace_time == 0)
+      grace_time = now;
+
+    if ((unsigned long)(now - grace_time) > GREE_AC_GRACE_PERIOD)
+    {
+      Serial.println("Turning off AC");
+      ac_off();
+      grace_time = now;
+      return;
+    }
+  }
+  else if (ac_running && producing)
+  {
+    grace_time = 0;
+  }
 }
 
 int get_power()
@@ -171,6 +211,8 @@ int get_power()
     Serial.print("Power: ");
     Serial.println(power);
 
+    error = 0;
+
     // Display the power consumption value on the LED matrix
     return (int)power;
   }
@@ -178,6 +220,7 @@ int get_power()
   {
     digitalWrite(LED, LOW);
     Serial.println("Error making HTTP request");
+    error++;
   }
   return 0;
 }
@@ -194,10 +237,13 @@ void ac_on()
   ac.setSleep(false);
   ac.setTurbo(false);
   ac.send(GREE_AC_SEND_REPEAT);
+  ac_running = true;
+  grace_time = 0;
 }
 
 void ac_off()
 {
   ac.off();
   ac.send(GREE_AC_SEND_REPEAT);
+  ac_running = false;
 }
