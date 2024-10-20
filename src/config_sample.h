@@ -25,5 +25,6 @@
 #define GREE_AC_TURN_ON_THRESHOLD 1800
 #define GREE_AC_GRACE_PERIOD 5*60*1000 // 5 minutes
 #define ERROR_RESTART 30
+#define WDT_TIMEOUT 3
 
 #endif
