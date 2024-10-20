@@ -7,6 +7,7 @@
 #include <IRremoteESP8266.h>
 #include <IRsend.h>
 #include <ir_Gree.h>
+#include <esp_task_wdt.h>
 
 // Replace with your network credentials
 const char *ssid = SSID;
@@ -38,6 +39,8 @@ bool ac_running = false;
 
 void setup()
 {
+  esp_task_wdt_init(WDT_TIMEOUT, true); // enable panic so ESP32 restarts
+  esp_task_wdt_add(NULL);               // add current thread to WDT watch
   pinMode(LED, OUTPUT);
   digitalWrite(LED, LOW);
   ac.begin();
@@ -79,6 +82,7 @@ RgbColor getColorWithPower(byte value)
 
 void loop()
 {
+  esp_task_wdt_reset();
   // Handle OTA update requests
   ArduinoOTA.handle();
 
@@ -117,6 +121,13 @@ void loop()
     // time to poll data
     power = get_power();
     last_poll = now;
+
+    producing = power < 0;
+
+    if (producing)
+      power = -power;
+
+    Serial.printf("Producing: %d, AC running %d, Power %d, Grace time %lu\n", producing, ac_running, power, (now - grace_time) / 1000);
   }
 
   if (error > ERROR_RESTART)
@@ -130,17 +141,14 @@ void loop()
 
   if ((unsigned long)(now - last_change) > LED_CHANGE_DELAY)
   {
-    // time to poll data
-    producing = power < 0;
 
-    if (producing)
-      power = -power;
-    if (producing && power > MAX_POWER)
-      power = MAX_POWER;
-    if (!producing && power > MAX_PRODUCING)
-      power = MAX_PRODUCING;
+    int led_power = power;
+    if (!producing && led_power > MAX_POWER)
+      led_power = MAX_POWER;
+    if (producing && led_power > MAX_PRODUCING)
+      led_power = MAX_PRODUCING;
     int step = (producing ? MAX_PRODUCING : MAX_POWER) / LED_COUNT;
-    int target_leds = power / step;
+    int target_leds = led_power / step;
 
     if (target_leds > current_leds)
       current_leds++;
@@ -163,7 +171,7 @@ void loop()
 
   if (producing && !ac_running && power > GREE_AC_TURN_ON_THRESHOLD)
   {
-    if ((unsigned long)(now - grace_time) > GREE_AC_GRACE_PERIOD)
+    if (grace_time == 0 || (unsigned long)(now - grace_time) > GREE_AC_GRACE_PERIOD)
     {
       Serial.println("Turning on AC");
       ac_on();
@@ -171,10 +179,13 @@ void loop()
       return;
     }
   }
-  else if ((ac_running && !producing))
+  else if (ac_running && !producing)
   {
     if (grace_time == 0)
+    {
       grace_time = now;
+      Serial.println("Low power detect, entering grace mode");
+    }
 
     if ((unsigned long)(now - grace_time) > GREE_AC_GRACE_PERIOD)
     {
@@ -192,7 +203,8 @@ void loop()
 
 int get_power()
 {
-  digitalWrite(LED, HIGH);
+  digitalWrite(LED, LOW);
+
   // Make an HTTP request to the Shelly 3EM device API to get the current power consumption data
   String url = "http://" + String(shellyIP) + "/status";
   HTTPClient http;
@@ -213,15 +225,13 @@ int get_power()
 
     error = 0;
 
+    digitalWrite(LED, HIGH);
     // Display the power consumption value on the LED matrix
     return (int)power;
   }
-  else
-  {
-    digitalWrite(LED, LOW);
-    Serial.println("Error making HTTP request");
-    error++;
-  }
+
+  Serial.println("Error making HTTP request");
+  error++;
   return 0;
 }
 
